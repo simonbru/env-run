@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import shlex
 import subprocess
 import sys
 from enum import Enum
@@ -12,9 +13,6 @@ from pydantic import (
     BaseModel,
     BaseSettings,
     Field,
-    PyObject,
-    RedisDsn,
-    PostgresDsn,
     validator,
 )
 
@@ -70,12 +68,12 @@ class CommandSettings(BaseModel):
 
     @validator("prefix", pre=True, always=True)
     def default_prefix(cls, v, values):
-        print("default_prefix")
+        print("default_prefix", v)
         if v is not None:
             return v
-        elif values["preset"] == Preset.vagrant:
+        elif values.get("preset") == Preset.vagrant:
             return ["vagrant", "ssh", "--"]
-        elif values["preset"] == Preset.vssh:
+        elif values.get("preset") == Preset.vssh:
             return ["vssh"]
         else:
             return []
@@ -99,13 +97,22 @@ class CommandSettings(BaseModel):
 
     @validator("args", always=True)
     def default_placeholder(cls, v, values):
+        """
+        Append placeholder to args if not already specified.
+        """
         print("default_placeholder")
+        # TODO: add placeholder for subcommand
         if any(isinstance(arg, Placeholder) for arg in v):
             return v
-        elif values["preset"] in (Preset.vagrant, Preset.vssh):
+        elif values.get("preset") in (Preset.vagrant, Preset.vssh):
             return [*v, Placeholder.shell_args]
         else:
             return [*v, Placeholder.args]
+
+
+# class SubCommandSettings(CommandSettings):
+    
+
 
 class Settings(BaseSettings):
     default: CommandSettings = {}
@@ -126,14 +133,17 @@ def read_raw_settings():
 
 
 def run_command(settings: Settings, args: List[str]) -> int:
-    command_settings = settings.default
+    if len(args) > 0 and args[0] in settings.commands:
+        command = args[0]
+        command_settings = settings.commands[command]
+    else:
+        command_settings = settings.default
     final_args = command_settings.prefix.copy()
     for settings_arg in command_settings.args:
         if settings_arg == Placeholder.args:
             final_args += args
         elif settings_arg == Placeholder.shell_args:
-            # TODO:
-            final_args += args
+            final_args += [shlex.quote(arg) for arg in args]
         else:
             final_args.append(settings_arg)
     print("final_args:", pformat(final_args))
@@ -161,7 +171,7 @@ def main():
     # settings = Settings()
 
     pprint(settings.dict())
-    input()
+    # input()
     exit_code = run_command(settings, sys.argv[1:])
     sys.exit(exit_code)
 
