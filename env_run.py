@@ -5,11 +5,11 @@ import os
 import shlex
 import subprocess
 import sys
-from enum import Enum, IntEnum
-from pathlib import Path
-from pprint import pformat, pprint
-from typing import Dict, List, Literal, Union
 import typing
+from enum import Enum
+from pathlib import Path
+from pprint import pformat
+from typing import Dict, List, Literal, Union
 
 import toml
 from pydantic import (
@@ -22,32 +22,7 @@ from pydantic import (
 logger = logging.getLogger("erun")
 
 
-# class LogLevel(str, Enum):
-#     """
-#     See `logging._nameToLevel`
-#     """
-#     CRITICAL = "CRITICAL"
-#     FATAL = "FATAL"
-#     ERROR = "ERROR"
-#     WARN = "WARN"
-#     WARNING = "WARNING"
-#     INFO = "INFO"
-#     DEBUG = "DEBUG"
-
-
-# class LogLevel(Enum):
-#     """
-#     See `logging._nameToLevel`
-#     """
-#     CRITICAL = logging.CRITICAL
-#     FATAL = logging.FATAL
-#     ERROR = logging.ERROR
-#     WARN = logging.WARN
-#     WARNING = logging.WARNING
-#     INFO = logging.INFO
-#     DEBUG = logging.DEBUG
-
-
+# See `logging._nameToLevel`
 LogLevel = Literal[
     "CRITICAL",
     "FATAL",
@@ -84,32 +59,10 @@ def guess_preset():
     return Preset.native
 
 
-# def default_args(cls, v, values):
-#     logger.debug("default_args")
-#     if v is not None:
-#         return v
-#     elif values["preset"] in (Preset.vagrant, Preset.vssh):
-#         return [Placeholder.shell_args]
-#     else:
-#         return [Placeholder.args]
-
-
 class CommandSettings(BaseModel):
     preset: Preset = Field(default_factory=guess_preset)
-    # preset: Preset = Field()
     prefix: List[str] = None
     args: List[Union[Placeholder, str]] = None
-    # type: EnvType = None
-
-    # class Config:
-    #     validate_all = True
-
-    # @validator("preset", pre=True, always=True)
-    # def guess_preset(cls, v):
-    #     logger.debug("guess_preset")
-    #     if v is not None:
-    #         return v
-    #     return "vagrant"
 
     @validator("prefix", pre=True, always=True)
     def default_prefix(cls, v, values):
@@ -122,18 +75,8 @@ class CommandSettings(BaseModel):
         else:
             return []
 
-    # @validator("args", pre=True, always=True)
-    # def default_args(cls, v, values):
-    #     logger.debug("default_args")
-    #     if v is not None:
-    #         return v
-    #     elif values["preset"] in (Preset.vagrant, Preset.vssh):
-    #         return [Placeholder.shell_args]
-    #     else:
-    #         return [Placeholder.args]
-
     @validator("args", each_item=True)
-    def clean_args(cls, v):
+    def parse_args(cls, v):
         try:
             return Placeholder(v)
         except ValueError:
@@ -169,7 +112,7 @@ def read_raw_settings():
     for path in (current_dir, *current_dir.parents):
         config_path = path / ".erun.toml"
         if config_path.exists():
-            logger.debug(f"Read configuration from: %s", config_path)
+            logger.debug("Read configuration from: %s", config_path)
             raw_data = config_path.read_text()
             return toml.loads(raw_data)
     return {}
@@ -197,35 +140,21 @@ def run_command(settings: Settings, args: List[str]) -> int:
 
 
 def main():
-    # settings = Settings(**{"docker-compose": "cool"})
-    # settings = Settings(
-    #     **{
-    #         "commands": {"black": {"truc": "asd"}},
-    #         "default": {"truc": 4},
-    #     }
-    # )
-
-    # file_config = toml.loads(open(".erun.toml").read())
-    # logger.debug("file_config:", pformat(file_config))
-    # settings = Settings(**file_config)
     logging.basicConfig(style="{", format="{message}")
+
     # Manually read log level from environment to display log messages before
     # settings are parsed. It will be reset according to parsed settings.
     early_log_level = os.environ.get("ERUN_LOG")
     if early_log_level and early_log_level in typing.get_args(LogLevel):
         logger.setLevel(early_log_level)
 
+    # Read and apply settings
     raw_setings = read_raw_settings()
     logger.debug("raw_setings:", pformat(raw_setings))
     settings = Settings(**raw_setings)
-    # print(settings.log)
-    # print(logger.getEffectiveLevel())
-    # print(logger.isEnabledFor(logging.DEBUG))
-    # import ipdb; ipdb.set_trace()
-
-    # settings = Settings()
     logger.setLevel(settings.log)
     logger.debug("settings: %s", pformat(settings.dict()))
+
     args = sys.argv[1:]
     if not args:
         print("Usage: erun COMMAND [...ARGS]", file=sys.stderr)
