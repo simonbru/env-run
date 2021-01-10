@@ -25,8 +25,11 @@ class Preset(str, Enum):
 
 
 class Placeholder(str, Enum):
+    cmd = "{cmd}"
     args = "{args}"
     shell_args = "{shell_args}"
+
+    ANY_ARGS = {args, shell_args}
 
 
 def guess_preset():
@@ -53,7 +56,7 @@ class CommandSettings(BaseModel):
     preset: Preset = Field(default_factory=guess_preset)
     # preset: Preset = Field()
     prefix: List[str] = None
-    args: List[Union[Placeholder, str]] = []
+    args: List[Union[Placeholder, str]] = None
     # type: EnvType = None
 
     # class Config:
@@ -96,22 +99,20 @@ class CommandSettings(BaseModel):
             return v
 
     @validator("args", always=True)
-    def default_placeholder(cls, v, values):
+    def default_placeholders(cls, v, values):
         """
-        Append placeholder to args if not already specified.
+        Set default args and append placeholders to args if not already specified.
         """
-        print("default_placeholder")
-        # TODO: add placeholder for subcommand
-        if any(isinstance(arg, Placeholder) for arg in v):
+        print("default_placeholders")
+        if v is None:
+            v = [Placeholder.cmd]
+
+        if any(arg in Placeholder.ANY_ARGS for arg in v):
             return v
         elif values.get("preset") in (Preset.vagrant, Preset.vssh):
             return [*v, Placeholder.shell_args]
         else:
             return [*v, Placeholder.args]
-
-
-# class SubCommandSettings(CommandSettings):
-    
 
 
 class Settings(BaseSettings):
@@ -127,20 +128,23 @@ def read_raw_settings():
     for path in (current_dir, *current_dir.parents):
         config_path = path / ".erun.toml"
         if config_path.exists():
+            print(f"Read configuration from: {config_path}")
             raw_data = config_path.read_text()
             return toml.loads(raw_data)
     return {}
 
 
 def run_command(settings: Settings, args: List[str]) -> int:
-    if len(args) > 0 and args[0] in settings.commands:
-        command = args[0]
+    command, *args = args
+    if command in settings.commands:
         command_settings = settings.commands[command]
     else:
         command_settings = settings.default
     final_args = command_settings.prefix.copy()
     for settings_arg in command_settings.args:
-        if settings_arg == Placeholder.args:
+        if settings_arg == Placeholder.cmd:
+            final_args.append(command)
+        elif settings_arg == Placeholder.args:
             final_args += args
         elif settings_arg == Placeholder.shell_args:
             final_args += [shlex.quote(arg) for arg in args]
@@ -167,12 +171,16 @@ def main():
     raw_config = read_raw_settings()
     print("raw_config:", pformat(raw_config))
     settings = Settings(**raw_config)
-    
+
     # settings = Settings()
 
     pprint(settings.dict())
     # input()
-    exit_code = run_command(settings, sys.argv[1:])
+    args = sys.argv[1:]
+    if not args:
+        print("Usage: erun COMMAND [...ARGS]")
+        sys.exit(1)
+    exit_code = run_command(settings, args)
     sys.exit(exit_code)
 
 
