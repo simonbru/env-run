@@ -1,12 +1,13 @@
 [tool.poetry]
 name = "env-run"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
 authors = ["Simon Brulhart <simon@brulhart.me>"]
 
 [tool.poetry.dependencies]
 python = "^3.8"
 pydantic = "^1.7.2"
+toml = "^0.10.2"
 
 [tool.poetry.dev-dependencies]
 ipdb = "^0.13.4"

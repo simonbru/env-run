@@ -1,86 +1,166 @@
 #!/usr/bin/env python
 
+import logging
+import os
+import shlex
+import subprocess
+import sys
+import typing
 from enum import Enum
 from pathlib import Path
-from pprint import pformat, pprint
-from typing import Dict, List
+from pprint import pformat
+from typing import Dict, List, Literal, Union
 
 import toml
 from pydantic import (
     BaseModel,
     BaseSettings,
     Field,
-    PyObject,
-    RedisDsn,
-    PostgresDsn,
     validator,
 )
 
-
-class ComposeSettings(BaseModel):
-    container: str = None
-    compose = True
+logger = logging.getLogger("erun")
 
 
-class EnvType(str, Enum):
+# See `logging._nameToLevel`
+LogLevel = Literal[
+    "CRITICAL",
+    "FATAL",
+    "ERROR",
+    "WARN",
+    "WARNING",
+    "INFO",
+    "DEBUG",
+]
+
+
+class Preset(str, Enum):
     compose = "compose"
     native = "native"
     vagrant = "vagrant"
+    vssh = "vssh"
 
 
-def guess_env_type():
-    if Path(".vagrant").exists():
-        return EnvType.vagrant
-    else:
-        return EnvType.native
+class Placeholder(str, Enum):
+    cmd = "{cmd}"
+    args = "{args}"
+    shell_args = "{shell_args}"
+
+    ANY_ARGS = {args, shell_args}
+
+
+def guess_preset():
+    current_dir = Path().resolve()
+    for path in (current_dir, *current_dir.parents):
+        if path.joinpath(".vagrant/vssh.cfg").exists():
+            return Preset.vssh
+        elif path.joinpath(".vagrant").exists():
+            return Preset.vagrant
+    return Preset.native
+
 
 class CommandSettings(BaseModel):
-    type: EnvType = Field(default_factory=guess_env_type)
-    # type: EnvType = None
-    compose: ComposeSettings = None
+    preset: Preset = Field(default_factory=guess_preset)
+    prefix: List[str] = None
+    args: List[Union[Placeholder, str]] = None
 
-    # class Config:
-    #     validate_all = True
-
-    @validator("type", pre=True)
-    def guess_type(cls, v):
-        print("guess_type")
+    @validator("prefix", pre=True, always=True)
+    def default_prefix(cls, v, values):
         if v is not None:
             return v
-        return "vagrant"
+        elif values.get("preset") == Preset.vagrant:
+            return ["vagrant", "ssh", "--"]
+        elif values.get("preset") == Preset.vssh:
+            return ["vssh"]
+        else:
+            return []
 
-    # @validator("type", pre=True)
-    # def guess_type(cls, v):
-    #     print("guess_type")
-    #     if v is not None:
-    #         return v
-    #     return "vagrant"
+    @validator("args", each_item=True)
+    def parse_args(cls, v):
+        try:
+            return Placeholder(v)
+        except ValueError:
+            return v
+
+    @validator("args", always=True)
+    def default_placeholders(cls, v, values):
+        """
+        Set default args and append placeholders to args if not already specified.
+        """
+        if v is None:
+            v = [Placeholder.cmd]
+
+        if any(arg in Placeholder.ANY_ARGS for arg in v):
+            return v
+        elif values.get("preset") in (Preset.vagrant, Preset.vssh):
+            return [*v, Placeholder.shell_args]
+        else:
+            return [*v, Placeholder.args]
 
 
 class Settings(BaseSettings):
     default: CommandSettings = {}
     commands: Dict[str, CommandSettings] = {}
+    log: LogLevel = "INFO"
 
     class Config:
         env_prefix = "erun_"
 
 
+def read_raw_settings():
+    current_dir = Path().resolve()
+    for path in (current_dir, *current_dir.parents):
+        config_path = path / ".erun.toml"
+        if config_path.exists():
+            logger.debug("Read configuration from: %s", config_path)
+            raw_data = config_path.read_text()
+            return toml.loads(raw_data)
+    return {}
+
+
+def run_command(settings: Settings, args: List[str]) -> int:
+    command, *args = args
+    if command in settings.commands:
+        command_settings = settings.commands[command]
+    else:
+        command_settings = settings.default
+    final_args = command_settings.prefix.copy()
+    for settings_arg in command_settings.args:
+        if settings_arg == Placeholder.cmd:
+            final_args.append(command)
+        elif settings_arg == Placeholder.args:
+            final_args += args
+        elif settings_arg == Placeholder.shell_args:
+            final_args += [shlex.quote(arg) for arg in args]
+        else:
+            final_args.append(settings_arg)
+    logger.debug("final_args: %s", final_args)
+    result = subprocess.run(final_args)
+    return result.returncode
+
+
 def main():
-    # settings = Settings(**{"docker-compose": "cool"})
-    # settings = Settings(
-    #     **{
-    #         "commands": {"black": {"truc": "asd"}},
-    #         "default": {"truc": 4},
-    #     }
-    # )
+    logging.basicConfig(style="{", format="{message}")
 
-    file_config = toml.loads(open(".erun.toml").read())
-    print("file_config:", pformat(file_config))
-    settings = Settings(**file_config)
+    # Manually read log level from environment to display log messages before
+    # settings are parsed. It will be reset according to parsed settings.
+    early_log_level = os.environ.get("ERUN_LOG")
+    if early_log_level and early_log_level in typing.get_args(LogLevel):
+        logger.setLevel(early_log_level)
 
-    # settings = Settings()
+    # Read and apply settings
+    raw_setings = read_raw_settings()
+    logger.debug("raw_setings:", pformat(raw_setings))
+    settings = Settings(**raw_setings)
+    logger.setLevel(settings.log)
+    logger.debug("settings: %s", pformat(settings.dict()))
 
-    pprint(settings.dict())
+    args = sys.argv[1:]
+    if not args:
+        print("Usage: erun COMMAND [...ARGS]", file=sys.stderr)
+        sys.exit(1)
+    exit_code = run_command(settings, args)
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
