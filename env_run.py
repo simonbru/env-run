@@ -150,7 +150,7 @@ def main():
 
     # Read and apply settings
     raw_setings = read_raw_settings()
-    logger.debug("raw_setings:", pformat(raw_setings))
+    logger.debug("raw_setings: %s", pformat(raw_setings))
     settings = Settings(**raw_setings)
     logger.setLevel(settings.log)
     logger.debug("settings: %s", pformat(settings.dict()))
