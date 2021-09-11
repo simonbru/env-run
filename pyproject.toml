@@ -5,13 +5,13 @@ description = ""
 authors = ["Simon Brulhart <simon@brulhart.me>"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 pydantic = "^1.7.2"
 toml = "^0.10.2"
 
 [tool.poetry.dev-dependencies]
 ipdb = "^0.13.4"
-black = {version = "^20.8b1", allow-prereleases = true}
+black = {version = "^21.8b0", allow-prereleases = true}
 
 [tool.poetry.scripts]
 erun = 'env_run:main'
