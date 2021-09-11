@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import argparse
 import logging
 import os
 import shlex
@@ -124,7 +125,7 @@ def read_raw_settings():
     return {}
 
 
-def run_command(settings: Settings, args: List[str]) -> int:
+def run_command(settings: Settings, args: List[str], dry_run: bool = False) -> int:
     command, *args = args
     if command in settings.commands:
         command_settings = settings.commands[command]
@@ -141,12 +142,23 @@ def run_command(settings: Settings, args: List[str]) -> int:
         else:
             final_args.append(settings_arg)
     logger.debug("final_args: %s", final_args)
-    result = subprocess.run(final_args)
-    return result.returncode
+    if dry_run:
+        print("Would run:")
+        print(shlex.join(final_args))
+        return 0
+    else:
+        result = subprocess.run(final_args)
+        return result.returncode
 
 
 def main():
     logging.basicConfig(style="{", format="{message}")
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("COMMAND")
+    parser.add_argument("ARGS", nargs="*")
+    parser.add_argument("--dry-run", "-n", action="store_true")
+    options = parser.parse_args()
 
     # Manually read log level from environment to display log messages before
     # settings are parsed. It will be reset according to parsed settings.
@@ -161,11 +173,8 @@ def main():
     logger.setLevel(settings.log)
     logger.debug("settings: %s", pformat(settings.dict()))
 
-    args = sys.argv[1:]
-    if not args:
-        print("Usage: erun COMMAND [...ARGS]", file=sys.stderr)
-        sys.exit(1)
-    exit_code = run_command(settings, args)
+    command_with_args = [options.COMMAND, *options.ARGS]
+    exit_code = run_command(settings, command_with_args, dry_run=options.dry_run)
     sys.exit(exit_code)
 
 
