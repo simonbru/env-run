@@ -103,6 +103,12 @@ class Settings(BaseSettings):
     commands: Dict[str, CommandSettings] = {}
     log: LogLevel = "INFO"
 
+    @validator("log", pre=True)
+    def validate_log(cls, v, field):
+        if not v:
+            return field.default
+        return v.upper()
+
     class Config:
         env_prefix = "erun_"
 
@@ -144,7 +150,7 @@ def main():
 
     # Manually read log level from environment to display log messages before
     # settings are parsed. It will be reset according to parsed settings.
-    early_log_level = os.environ.get("ERUN_LOG")
+    early_log_level = (os.environ.get("ERUN_LOG") or "").upper()
     if early_log_level and early_log_level in typing.get_args(LogLevel):
         logger.setLevel(early_log_level)
 
