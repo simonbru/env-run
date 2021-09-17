@@ -155,9 +155,10 @@ def main():
     logging.basicConfig(style="{", format="{message}")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("COMMAND")
-    parser.add_argument("ARGS", nargs="*")
     parser.add_argument("--dry-run", "-n", action="store_true")
+    # Use argparse.PARSER to ignore option arguments (e.g. "-n")
+    # after the first positional argument.
+    parser.add_argument("ARGS", nargs=argparse.PARSER)
     options = parser.parse_args()
 
     # Manually read log level from environment to display log messages before
@@ -173,8 +174,7 @@ def main():
     logger.setLevel(settings.log)
     logger.debug("settings: %s", pformat(settings.dict()))
 
-    command_with_args = [options.COMMAND, *options.ARGS]
-    exit_code = run_command(settings, command_with_args, dry_run=options.dry_run)
+    exit_code = run_command(settings, options.ARGS, dry_run=options.dry_run)
     sys.exit(exit_code)
 
 
