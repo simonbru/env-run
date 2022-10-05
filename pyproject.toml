@@ -1,17 +1,17 @@
 [tool.poetry]
 name = "env-run"
-version = "0.5.0"
+version = "0.5.1"
 description = ""
 authors = ["Simon Brulhart <simon@brulhart.me>"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pydantic = "^1.7.2"
+pydantic = "^1.10.2"
 toml = "^0.10.2"
 
 [tool.poetry.dev-dependencies]
-ipdb = "^0.13.4"
-black = {version = "^21.8b0", allow-prereleases = true}
+black = "^22.8.0"
+ipdb = "^0.13.9"
 
 [tool.poetry.scripts]
 erun = 'env_run:main'
