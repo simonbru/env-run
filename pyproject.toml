@@ -5,9 +5,8 @@ description = ""
 authors = ["Simon Brulhart <simon@brulhart.me>"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.11"
 pydantic = "^1.10.2"
-toml = "^0.10.2"
 
 [tool.poetry.dev-dependencies]
 black = "^22.8.0"

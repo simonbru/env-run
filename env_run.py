@@ -6,13 +6,13 @@ import os
 import shlex
 import subprocess
 import sys
+import tomllib
 import typing
 from enum import Enum
 from pathlib import Path
 from pprint import pformat
 from typing import Dict, List, Literal, Union
 
-import toml
 from pydantic import (
     BaseModel,
     BaseSettings,
@@ -121,7 +121,7 @@ def read_raw_settings():
         if config_path.exists():
             logger.debug("Read configuration from: %s", config_path)
             raw_data = config_path.read_text()
-            return toml.loads(raw_data)
+            return tomllib.loads(raw_data)
     return {}
 
 
